@@ -85,7 +85,39 @@ export default function DashboardPage() {
     };
   });
 
-  const maxLiters = Math.max(...dailyData.map(d => Math.max(d.morning.liters, d.evening.liters)), 1);
+  const maxLiters = Math.max(...dailyData.map(d => Math.max(d.morning.liters, d.evening.liters, d.total.liters)), 1);
+
+  // Calculate growth rate for each day
+  const dailyDataWithGrowth = dailyData.map((day, index) => {
+    let growthRate = 0;
+    let growthDirection: 'up' | 'down' | 'neutral' = 'neutral';
+    
+    if (index > 0) {
+      const prevDay = dailyData[index - 1];
+      const prevTotal = prevDay.total.liters;
+      const currentTotal = day.total.liters;
+      
+      if (prevTotal > 0) {
+        growthRate = ((currentTotal - prevTotal) / prevTotal) * 100;
+      } else if (currentTotal > 0) {
+        growthRate = 100; // 100% growth from 0
+      }
+      
+      if (growthRate > 0) growthDirection = 'up';
+      else if (growthRate < 0) growthDirection = 'down';
+    }
+
+    return {
+      ...day,
+      growthRate,
+      growthDirection,
+    };
+  });
+
+  // Chart dimensions
+  const chartHeight = 300;
+  const chartWidth = '100%';
+  const maxChartValue = Math.max(maxLiters, 10); // Minimum scale of 10L for better visibility
 
   return (
     <div className="space-y-6">
@@ -144,70 +176,188 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Graph - Horizontal Bar Diagram */}
-      <div className="bg-white shadow-xl rounded-xl p-6 border border-gray-100">
-        <div className="flex items-center justify-between mb-6">
+      {/* Chart Graph - Daily Milk Collection with Growth Rate */}
+      <div className="bg-white shadow-xl rounded-xl p-4 sm:p-6 border border-gray-100">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6">
           <div>
             <h3 className="text-xl font-bold text-gray-900">Last 7 Days Milk Collection</h3>
-            <p className="text-sm text-gray-600 mt-1">Morning & Evening breakdown</p>
+            <p className="text-sm text-gray-600 mt-1">Daily reports with growth rate</p>
           </div>
         </div>
-        <div className="space-y-6">
-          {dailyData.map((day, index) => {
-            const date = new Date(day.date);
-            const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-            const morningPercentage = (day.morning.liters / maxLiters) * 100;
-            const eveningPercentage = (day.evening.liters / maxLiters) * 100;
-            
-            return (
-              <div key={index} className="space-y-2">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-                  <div className="w-full sm:w-24 text-sm text-gray-600">
-                    <div className="font-medium">{dayName}</div>
-                    <div className="text-xs text-gray-500">{day.date}</div>
-                  </div>
-                  <div className="flex-1 w-full space-y-2">
-                    {/* Morning Bar */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-                      <div className="w-20 text-xs text-gray-600 font-medium">Morning:</div>
-                      <div className="flex-1 w-full sm:w-auto bg-gray-200 rounded-full h-6 relative overflow-hidden">
-                        <div
-                          className="bg-yellow-400 h-full rounded-full flex items-center justify-end pr-2 transition-all"
-                          style={{ width: `${morningPercentage}%` }}
-                        >
-                          {day.morning.liters > 0 && (
-                            <span className="text-gray-800 text-xs font-medium px-1">{day.morning.liters.toFixed(1)}L</span>
-                          )}
+
+        {/* Chart Container */}
+        <div className="relative w-full overflow-x-auto">
+          <div className="min-w-[600px]">
+            {/* Chart Area */}
+            <div className="relative" style={{ height: `${chartHeight}px`, width: chartWidth }}>
+              {/* Y-Axis Labels */}
+              <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-xs text-gray-500 pr-2">
+                {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+                  <span key={ratio}>{Math.round(maxChartValue * ratio)}L</span>
+                ))}
+              </div>
+
+              {/* Chart Bars and Lines */}
+              <div className="ml-12 h-full relative">
+                <svg width="100%" height={chartHeight - 32} className="absolute top-0 left-0">
+                  {/* Grid Lines */}
+                  {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => (
+                    <line
+                      key={idx}
+                      x1="0"
+                      y1={chartHeight - 32 - (ratio * (chartHeight - 32))}
+                      x2="100%"
+                      y2={chartHeight - 32 - (ratio * (chartHeight - 32))}
+                      stroke="#e5e7eb"
+                      strokeWidth="1"
+                      strokeDasharray="4,4"
+                    />
+                  ))}
+
+                  {/* Morning Bars */}
+                  {dailyDataWithGrowth.map((day, index) => {
+                    const barWidth = 100 / (dailyDataWithGrowth.length * 3);
+                    const xPosition = (index * 100 / dailyDataWithGrowth.length) + (barWidth * 1.5);
+                    const morningHeight = (day.morning.liters / maxChartValue) * (chartHeight - 32);
+                    const yPosition = chartHeight - 32 - morningHeight;
+                    
+                    return (
+                      <rect
+                        key={`morning-${index}`}
+                        x={`${xPosition - barWidth}%`}
+                        y={yPosition}
+                        width={`${barWidth}%`}
+                        height={morningHeight}
+                        fill="#facc15"
+                        rx="4"
+                        className="hover:opacity-80 transition-opacity"
+                      />
+                    );
+                  })}
+
+                  {/* Evening Bars */}
+                  {dailyDataWithGrowth.map((day, index) => {
+                    const barWidth = 100 / (dailyDataWithGrowth.length * 3);
+                    const xPosition = (index * 100 / dailyDataWithGrowth.length) + (barWidth * 2.5);
+                    const eveningHeight = (day.evening.liters / maxChartValue) * (chartHeight - 32);
+                    const yPosition = chartHeight - 32 - eveningHeight;
+                    
+                    return (
+                      <rect
+                        key={`evening-${index}`}
+                        x={`${xPosition - barWidth}%`}
+                        y={yPosition}
+                        width={`${barWidth}%`}
+                        height={eveningHeight}
+                        fill="#3b82f6"
+                        rx="4"
+                        className="hover:opacity-80 transition-opacity"
+                      />
+                    );
+                  })}
+
+                  {/* Total Line (connects daily totals) */}
+                  {dailyDataWithGrowth.map((day, index) => {
+                    if (index === 0) return null;
+                    const prevX = ((index - 1) * 100 / dailyDataWithGrowth.length) + (100 / (dailyDataWithGrowth.length * 3) * 2);
+                    const currX = (index * 100 / dailyDataWithGrowth.length) + (100 / (dailyDataWithGrowth.length * 3) * 2);
+                    const prevY = chartHeight - 32 - ((dailyDataWithGrowth[index - 1].total.liters / maxChartValue) * (chartHeight - 32));
+                    const currY = chartHeight - 32 - ((day.total.liters / maxChartValue) * (chartHeight - 32));
+                    
+                    return (
+                      <line
+                        key={`line-${index}`}
+                        x1={`${prevX}%`}
+                        y1={prevY}
+                        x2={`${currX}%`}
+                        y2={currY}
+                        stroke="#10b981"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
+
+                  {/* Data Points */}
+                  {dailyDataWithGrowth.map((day, index) => {
+                    const xPosition = (index * 100 / dailyDataWithGrowth.length) + (100 / (dailyDataWithGrowth.length * 3) * 2);
+                    const yPosition = chartHeight - 32 - ((day.total.liters / maxChartValue) * (chartHeight - 32));
+                    
+                    return (
+                      <circle
+                        key={`point-${index}`}
+                        cx={`${xPosition}%`}
+                        cy={yPosition}
+                        r="5"
+                        fill="#10b981"
+                        stroke="white"
+                        strokeWidth="2"
+                        className="hover:r-6 transition-all"
+                      />
+                    );
+                  })}
+                </svg>
+
+                {/* X-Axis Labels and Data */}
+                <div className="absolute bottom-0 left-0 right-0 flex justify-around mt-2">
+                  {dailyDataWithGrowth.map((day, index) => {
+                    const date = new Date(day.date);
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                    
+                    return (
+                      <div key={index} className="flex flex-col items-center min-w-[80px]">
+                        <div className="text-xs font-medium text-gray-700 mb-1">{dayName}</div>
+                        <div className="text-xs text-gray-500 mb-2">{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                        
+                        {/* Daily Stats */}
+                        <div className="text-center mb-2 space-y-1">
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                            <span className="text-xs font-medium text-gray-700">{day.morning.liters.toFixed(1)}L</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <span className="text-xs font-medium text-gray-700">{day.evening.liters.toFixed(1)}L</span>
+                          </div>
+                          <div className="text-xs font-bold text-gray-900 pt-1 border-t border-gray-200">
+                            Total: {day.total.liters.toFixed(1)}L
+                          </div>
                         </div>
+
+                        {/* Growth Rate Indicator */}
+                        {index > 0 && (
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                            day.growthDirection === 'up' 
+                              ? 'bg-green-100 text-green-700' 
+                              : day.growthDirection === 'down'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {day.growthDirection === 'up' && (
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                              </svg>
+                            )}
+                            {day.growthDirection === 'down' && (
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                              </svg>
+                            )}
+                            {day.growthDirection === 'neutral' && <span>—</span>}
+                            <span>{Math.abs(day.growthRate).toFixed(1)}%</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="w-20 text-right text-xs font-medium text-gray-700">
-                        {day.morning.liters.toFixed(2)} L
-                      </div>
-                    </div>
-                    {/* Evening Bar */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-                      <div className="w-20 text-xs text-gray-600 font-medium">Evening:</div>
-                      <div className="flex-1 w-full sm:w-auto bg-gray-200 rounded-full h-6 relative overflow-hidden">
-                        <div
-                          className="bg-blue-500 h-full rounded-full flex items-center justify-end pr-2 transition-all"
-                          style={{ width: `${eveningPercentage}%` }}
-                        >
-                          {day.evening.liters > 0 && (
-                            <span className="text-white text-xs font-medium px-1">{day.evening.liters.toFixed(1)}L</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="w-20 text-right text-xs font-medium text-gray-700">
-                        {day.evening.liters.toFixed(2)} L
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
-            );
-          })}
+            </div>
+          </div>
         </div>
-        <div className="mt-6 flex gap-6 justify-center pt-4 border-t border-gray-200">
+
+        {/* Legend */}
+        <div className="mt-8 flex flex-wrap gap-4 justify-center pt-4 border-t border-gray-200">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 rounded-lg">
             <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
             <span className="text-sm font-medium text-gray-700">Morning</span>
@@ -215,6 +365,10 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg">
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
             <span className="text-sm font-medium text-gray-700">Evening</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-lg">
+            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+            <span className="text-sm font-medium text-gray-700">Total Trend</span>
           </div>
         </div>
       </div>
