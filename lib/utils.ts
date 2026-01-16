@@ -60,12 +60,24 @@ function ensureDataDir() {
 
 // Read JSON file
 export function readJsonFile<T>(filePath: string): T {
-  ensureDataDir();
+  try {
+    ensureDataDir();
+  } catch (error) {
+    // Directory creation might fail on read-only file systems (e.g., Vercel build)
+    // This is okay if the directory already exists
+    console.warn(`Could not ensure data directory exists: ${error}`);
+  }
+  
   try {
     if (!fs.existsSync(filePath)) {
+      console.warn(`File does not exist: ${filePath}`);
       return [] as unknown as T;
     }
     const fileContent = fs.readFileSync(filePath, 'utf-8');
+    if (!fileContent || fileContent.trim() === '') {
+      console.warn(`File is empty: ${filePath}`);
+      return [] as unknown as T;
+    }
     return JSON.parse(fileContent) as T;
   } catch (error) {
     console.error(`Error reading file ${filePath}:`, error);
@@ -75,11 +87,21 @@ export function readJsonFile<T>(filePath: string): T {
 
 // Write JSON file
 export function writeJsonFile<T>(filePath: string, data: T): void {
-  ensureDataDir();
+  try {
+    ensureDataDir();
+  } catch (error) {
+    // Directory creation might fail on read-only file systems
+    console.warn(`Could not ensure data directory exists: ${error}`);
+  }
+  
   try {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error writing file ${filePath}:`, error);
+    // On Vercel, file writes might fail - throw a more descriptive error
+    if (error.code === 'EROFS' || error.code === 'EACCES') {
+      throw new Error(`Cannot write to file system. This might be a read-only environment. ${error.message}`);
+    }
     throw error;
   }
 }
